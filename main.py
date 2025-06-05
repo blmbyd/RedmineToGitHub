@@ -1,26 +1,31 @@
-import yaml
+import os
 import logging
+from dotenv import load_dotenv
 from redmine_client import RedmineClient
 from github_client import GitHubClient
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Read configuration from environment variables
+REDMINE_URL = os.getenv("REDMINE_URL")
+REDMINE_API_KEY = os.getenv("REDMINE_API_KEY")
+GITHUB_REPO = os.getenv("GITHUB_REPO")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
     logging.info("Starting migration process...")
 
-    # Load config
-    logging.info("Loading configuration...")
-    with open('config.yaml', 'r') as f:
-        config = yaml.safe_load(f)
-
     # Initialize clients
     logging.info("Initializing Redmine and GitHub clients...")
     redmine = RedmineClient(
-        url=config['redmine']['url'],
-        api_key=config['redmine']['api_key']
+        url=REDMINE_URL,
+        api_key=REDMINE_API_KEY
     )
     github = GitHubClient(
-        repo=config['github']['repo'],
-        token=config['github']['token']
+        repo=GITHUB_REPO,
+        token=GITHUB_TOKEN
     )
 
     # Fetch issues from Redmine
