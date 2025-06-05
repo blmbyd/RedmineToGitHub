@@ -15,7 +15,7 @@ class RedmineClient:
                 'limit': limit,
                 'offset': offset
             }
-            resp = requests.get(f"{self.url}/issues.json", params=params)
+            resp = requests.get(f"{self.url}/issues.json", params=params, verify=False)
             resp.raise_for_status()
             data = resp.json()
             issues.extend(data['issues'])
