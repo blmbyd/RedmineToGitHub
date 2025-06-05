@@ -35,7 +35,3 @@ This project uses a `.env` file to store sensitive configuration such as API key
 - The `.env` file is loaded automatically by the application using [python-dotenv](https://pypi.org/project/python-dotenv/).
 - Make sure `.env` is listed in `.gitignore`.
 - Do not store sensitive data in `config.yaml` or any other tracked file.
-
-## License
-
-...
