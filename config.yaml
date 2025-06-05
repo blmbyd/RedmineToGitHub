@@ -1,0 +1,7 @@
+redmine:
+  url: "https://your-redmine-instance.com"
+  api_key: "your_redmine_api_key"
+
+github:
+  repo: "yourusername/yourrepo"
+  token: "your_github_personal_access_token"
