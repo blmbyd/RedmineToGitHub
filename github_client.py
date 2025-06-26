@@ -15,6 +15,12 @@ class GitHubClient:
         }
         title = issue['subject']
         body = issue['description'] or ''
+        
+        # Add author information from Redmine
+        if issue.get('author') and issue['author'].get('name'):
+            author_info = f"\n\n---\n*Originally created by {issue['author']['name']} in Redmine*"
+            body += author_info
+        
         # You may want to enrich the body with Redmine data (e.g., status, custom fields)
         data = {
             'title': title,
