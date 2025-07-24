@@ -30,6 +30,27 @@ This project uses a `.env` file to store sensitive configuration such as API key
     python main.py
     ```
 
+    **Optional parameters:**
+    
+    - `--limit N`: Migrate only the first N issues
+    - `--offset N`: Skip the first N issues and start from the (N+1)th issue
+    
+    **Examples:**
+    
+    ```bash
+    # Migrate all issues (default behavior)
+    python main.py
+    
+    # Migrate only the first 10 issues
+    python main.py --limit 10
+    
+    # Skip the first 50 issues and migrate the next 20
+    python main.py --offset 50 --limit 20
+    
+    # Skip the first 100 issues and migrate all remaining
+    python main.py --offset 100
+    ```
+
 ### Notes
 
 - The `.env` file is loaded automatically by the application using [python-dotenv](https://pypi.org/project/python-dotenv/).
