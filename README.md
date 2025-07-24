@@ -33,7 +33,7 @@ This project uses a `.env` file to store sensitive configuration such as API key
     **Optional parameters:**
     
     - `--limit N`: Migrate only the first N issues
-    - `--offset N`: Skip the first N issues and start from the (N+1)th issue
+    - `--start-from N`: Start migration from issue number N (default: 0 = start from beginning)
     
     **Examples:**
     
@@ -44,11 +44,11 @@ This project uses a `.env` file to store sensitive configuration such as API key
     # Migrate only the first 10 issues
     python main.py --limit 10
     
-    # Skip the first 50 issues and migrate the next 20
-    python main.py --offset 50 --limit 20
+    # Start from issue #50 and migrate the next 20 issues
+    python main.py --start-from 50 --limit 20
     
-    # Skip the first 100 issues and migrate all remaining
-    python main.py --offset 100
+    # Start from issue #100 and migrate all remaining issues
+    python main.py --start-from 100
     ```
 
 ### Notes
