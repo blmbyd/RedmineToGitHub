@@ -18,7 +18,12 @@ class GitHubClient:
         
         # Add author information from Redmine
         if issue.get('author') and issue['author'].get('name'):
-            author_info = f"\n\n---\n*Originally created by {issue['author']['name']} in Redmine*"
+            author_name = issue['author']['name']
+            issue_id = issue.get('id', '')
+            
+            # Build the footer with email and issue number
+            author_info = f"\n\n---\n*Originally created by {author_name} in Redmine issue number {issue_id}*"
+            
             body += author_info
         
         # You may want to enrich the body with Redmine data (e.g., status, custom fields)
