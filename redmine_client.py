@@ -20,7 +20,8 @@ class RedmineClient:
             params = {
                 'key': self.api_key,
                 'limit': batch_limit,
-                'offset': current_offset
+                'offset': current_offset,
+                'sort': 'id:asc'
             }
             logging.info(f"Requesting Redmine issues: offset={current_offset}, limit={batch_limit}")
             resp = requests.get(f"{self.url}/issues.json", params=params, verify=False)
@@ -51,5 +52,5 @@ class RedmineClient:
                 break
                 
             current_offset += batch_limit
-            
+        
         return issues

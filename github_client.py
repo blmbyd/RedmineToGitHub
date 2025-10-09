@@ -14,18 +14,18 @@ class GitHubClient:
             'Accept': 'application/vnd.github+json'
         }
         
+        issue_id = issue.get('id', 'unknown')
         body = issue['description'] or ''
         # Add author information from Redmine
         if issue.get('author') and issue['author'].get('name'):
             author_name = issue['author']['name']
-            issue_id = issue.get('id', 'unknown')
             
             # Build the footer with email and issue number
             author_info = f"\n\n---\n*Originally created by {author_name} in Redmine issue number {issue_id}*"
             
             body += author_info
 
-        title = f"{issue['subject']} [Redmine #{issue_id}]"
+        title = f"{issue['subject']} [R-{issue_id}]"
 
         # You may want to enrich the body with Redmine data (e.g., status, custom fields)
         data = {

@@ -45,8 +45,12 @@ def main():
     logging.info(f"Fetched {len(issues)} issues from Redmine.")
 
     # Migrate to GitHub
+    if issues:
+        logging.info(f"Migration will process issues from ID #{issues[0].get('id', 'unknown')} to #{issues[-1].get('id', 'unknown')}")
+    
     for idx, issue in enumerate(issues, 1):
-        logging.info(f"Migrating issue {idx}/{len(issues)}: Redmine ID #{issue.get('id', 'unknown')}")
+        issue_id = issue.get('id', 'unknown')
+        logging.info(f"Migrating issue {idx}/{len(issues)}: Redmine ID #{issue_id}")
         github.create_issue_from_redmine(issue)
 
     logging.info("Migration process completed.")
