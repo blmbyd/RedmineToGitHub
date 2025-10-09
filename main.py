@@ -19,6 +19,7 @@ def main():
     parser = argparse.ArgumentParser(description='Migrate issues from Redmine to GitHub')
     parser.add_argument('--limit', type=int, help='Maximum number of issues to migrate')
     parser.add_argument('--start-from', type=int, default=0, help='Issue number to start migration from (default: 0 = start from beginning)')
+    parser.add_argument('--attachments', choices=['mirror','none'], help='Attachment handling mode (default: mirror). "mirror" uploads attachments into the GitHub repo; "none" skips them.')
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
@@ -27,6 +28,14 @@ def main():
         logging.info(f"Starting migration process with limit={args.limit}, start_from={args.start_from}...")
     else:
         logging.info(f"Starting migration process (all issues from #{args.start_from})..." if args.start_from > 0 else "Starting migration process (all issues)...")
+
+    # Determine attachments mode (CLI overrides env)
+    attachments_mode = args.attachments or os.getenv('ATTACHMENTS_MODE', 'mirror')
+    if attachments_mode not in ('mirror','none'):
+        logging.warning(f"Invalid ATTACHMENTS_MODE '{attachments_mode}' specified; falling back to 'mirror'.")
+        attachments_mode = 'mirror'
+    mirror_attachments = (attachments_mode == 'mirror')
+    logging.info(f"Attachments mode: {attachments_mode}")
 
     # Initialize clients
     logging.info("Initializing Redmine and GitHub clients...")
@@ -41,7 +50,7 @@ def main():
 
     # Fetch issues from Redmine
     logging.info("Fetching issues from Redmine...")
-    issues = redmine.get_issues(limit=args.limit, start_from=args.start_from)
+    issues = redmine.get_issues(limit=args.limit, start_from=args.start_from, include_attachments=mirror_attachments)
     logging.info(f"Fetched {len(issues)} issues from Redmine.")
 
     # Migrate to GitHub
@@ -51,7 +60,7 @@ def main():
     for idx, issue in enumerate(issues, 1):
         issue_id = issue.get('id', 'unknown')
         logging.info(f"Migrating issue {idx}/{len(issues)}: Redmine ID #{issue_id}")
-        github.create_issue_from_redmine(issue)
+    github.create_issue_from_redmine(issue, mirror_attachments=mirror_attachments, redmine_client=redmine)
 
     logging.info("Migration process completed.")
 

@@ -56,3 +56,33 @@ This project uses a `.env` file to store sensitive configuration such as API key
 - The `.env` file is loaded automatically by the application using [python-dotenv](https://pypi.org/project/python-dotenv/).
 - Make sure `.env` is listed in `.gitignore`.
 - Do not store sensitive data in `config.yaml` or any other tracked file.
+
+## Attachments
+
+By default, the migrator mirrors Redmine issue attachments into the target GitHub repository so they remain accessible even if Redmine is retired.
+
+Behavior:
+
+- Files are uploaded under `redmine_attachments/issue-<redmine_issue_id>/` in the repository via the GitHub Contents API.
+- Image files (detected via MIME type or extension) are embedded directly in the created GitHub issue with Markdown image syntax.
+- Non-image files are added as links.
+- If an attachment upload fails, it is skipped and processing continues.
+
+Disable attachment migration:
+
+```powershell
+python main.py --attachments none
+```
+
+Environment variable alternative (overridden by CLI):
+
+```
+ATTACHMENTS_MODE=none
+```
+
+Limitations:
+
+- Very large files may exceed GitHub REST API limits and be skipped.
+- Filenames that collide within the same issue get a numeric suffix (`-1`, `-2`, ...).
+
+Security note: Attachments are stored in the repository history. Remove sensitive artifacts from Redmine before migration if they should not become part of Git version history.

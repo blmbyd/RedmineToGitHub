@@ -1,12 +1,13 @@
 import requests
 import logging
+from typing import Optional
 
 class RedmineClient:
     def __init__(self, url, api_key):
         self.url = url.rstrip('/')
         self.api_key = api_key
 
-    def get_issues(self, limit=None, start_from=0):
+    def get_issues(self, limit: Optional[int] = None, start_from: int = 0, include_attachments: bool = False):
         issues = []
         current_offset = 0
         batch_limit = 100  # Always fetch 100 items per request
@@ -18,6 +19,8 @@ class RedmineClient:
                 'offset': current_offset,
                 'sort': 'id:asc'
             }
+            if include_attachments:
+                params['include'] = 'attachments'
             logging.info(f"Requesting Redmine issues: offset={current_offset}, limit={batch_limit}")
             resp = requests.get(f"{self.url}/issues.json", params=params, verify=False)
             resp.raise_for_status()
@@ -32,6 +35,11 @@ class RedmineClient:
 
             issues.extend(filtered_issues)
             logging.info(f"Received {len(data['issues'])} issues, {len(filtered_issues)} after filtering (total so far: {len(issues)})")
+
+            # Early stop if limit reached
+            if limit and len(issues) >= limit:
+                logging.info(f"Reached requested issue limit ({limit}); stopping pagination early.")
+                break
 
             # Stop if we've reached the end of available issues
             if current_offset + batch_limit >= data['total_count']:
@@ -49,3 +57,26 @@ class RedmineClient:
             issues = issues[:limit]
 
         return issues
+    
+    def download_attachment(self, attachment):
+        """Download a single attachment. Returns (bytes, filename, content_type) or raises."""
+        attachment_id = attachment.get('id')
+        filename = attachment.get('filename') or f"attachment-{attachment_id}"
+        content_type = attachment.get('content_type') or 'application/octet-stream'
+
+        content_url = attachment.get('content_url')
+        if not content_url:
+            content_url = f"{self.url}/attachments/download/{attachment_id}/{filename}"
+
+        if 'key=' not in content_url:
+            sep = '&' if '?' in content_url else '?'
+            content_url = f"{content_url}{sep}key={self.api_key}"
+
+        try:
+            logging.info(f"Downloading attachment {attachment_id} ({filename})")
+            resp = requests.get(content_url, verify=False, timeout=60)
+            resp.raise_for_status()
+            return resp.content, filename, content_type
+        except Exception as e:
+            logging.warning(f"Failed to download attachment {attachment_id} ({filename}): {e}")
+            raise
