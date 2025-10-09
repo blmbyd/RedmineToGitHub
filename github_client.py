@@ -153,12 +153,39 @@ class GitHubClient:
             author_info = f"\n\n---\n*Originally created by {author_name} in Redmine issue number {issue_id}*"
             body += author_info
 
-        title = f"{issue['subject']} [R-{issue_id}]"
+        title = f"{issue['subject']} [Redmine-{issue_id}]"
         data = {'title': title, 'body': body}
         resp = requests.post(f"{self.api_url}/issues", headers=headers, json=data)
         if resp.status_code == 201:
             issue_number = resp.json().get('number')
             logging.info(f"Successfully created GitHub issue #{issue_number} for Redmine issue #{issue_id}")
+            # --- Add Redmine notes as GitHub comments ---
+            notes = issue.get('journals', []) or []
+            for note in notes:
+                note_text = note.get('notes') or ''
+                if not note_text.strip():
+                    continue
+                author = note.get('user', {}).get('name') or note.get('author', {}).get('name') or 'Unknown'
+                created_on = note.get('created_on') or note.get('createdAt') or ''
+                comment_body = note_text
+                # Optionally add author/timestamp metadata
+                meta = []
+                if author:
+                    meta.append(f"*By {author}*")
+                if created_on:
+                    meta.append(f"*Created on {created_on}*")
+                if meta:
+                    comment_body += "\n\n---\n" + " ".join(meta)
+                comment_data = {'body': comment_body}
+                comment_url = f"{self.api_url}/issues/{issue_number}/comments"
+                try:
+                    comment_resp = requests.post(comment_url, headers=headers, json=comment_data)
+                    if comment_resp.status_code == 201:
+                        logging.info(f"Added comment for Redmine note to GitHub issue #{issue_number}")
+                    else:
+                        logging.warning(f"Failed to add comment for Redmine note to GitHub issue #{issue_number}: {comment_resp.status_code} {comment_resp.text}")
+                except Exception as e:
+                    logging.warning(f"Exception posting comment for Redmine note: {e}")
         else:
             logging.error(f"Failed to create GitHub issue for Redmine issue #{issue_id}: {resp.status_code} {resp.text}")
         resp.raise_for_status()

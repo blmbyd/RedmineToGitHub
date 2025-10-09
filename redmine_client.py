@@ -31,6 +31,20 @@ class RedmineClient:
             for issue in data['issues']:
                 issue_id = issue.get('id', 0)
                 if start_from == 0 or issue_id >= start_from:
+                    # Fetch journals for this issue
+                    try:
+                        detail_url = f"{self.url}/issues/{issue_id}.json"
+                        detail_params = {'key': self.api_key, 'include': 'journals'}
+                        detail_resp = requests.get(detail_url, params=detail_params, verify=False)
+                        detail_resp.raise_for_status()
+                        detail_data = detail_resp.json()
+                        if 'issue' in detail_data and 'journals' in detail_data['issue']:
+                            issue['journals'] = detail_data['issue']['journals']
+                        else:
+                            issue['journals'] = []
+                    except Exception as e:
+                        logging.warning(f"Failed to fetch journals for issue {issue_id}: {e}")
+                        issue['journals'] = []
                     filtered_issues.append(issue)
 
             issues.extend(filtered_issues)
