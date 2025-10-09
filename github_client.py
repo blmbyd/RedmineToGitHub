@@ -11,6 +11,8 @@ class GitHubClient:
         self.token = token
         self.api_url = f"https://api.github.com/repos/{self.repo}"
         self._default_branch: Optional[str] = None
+        # Cache of paths confirmed to exist in the repo during this runtime
+        self._existing_paths = set()
 
     def _headers(self):
         return {
@@ -34,6 +36,30 @@ class GitHubClient:
         name = re.sub(r'[^A-Za-z0-9._ -]+', '_', name)
         name = name.strip()
         return name or 'attachment'
+
+    def _path_exists(self, path_in_repo: str) -> bool:
+        """Return True if a file already exists at the given path in the repository.
+
+        Uses GitHub contents API. Caches positive results for the life of the client
+        to avoid duplicate network calls when the same path is checked multiple times.
+        On unexpected HTTP status codes (non 200/404) it logs a warning and returns False
+        so the caller will proceed to attempt an upload (safer default).
+        """
+        if path_in_repo in self._existing_paths:
+            return True
+        url = f"{self.api_url}/contents/{path_in_repo}"
+        try:
+            resp = requests.get(url, headers=self._headers())
+        except Exception as e:
+            logging.debug(f"Error checking existence of '{path_in_repo}': {e}; assuming not present")
+            return False
+        if resp.status_code == 200:
+            self._existing_paths.add(path_in_repo)
+            return True
+        if resp.status_code == 404:
+            return False
+        logging.warning(f"Unexpected status {resp.status_code} checking existence of '{path_in_repo}'; proceeding to upload")
+        return False
 
     def _upload_file(self, path_in_repo: str, content_bytes: bytes, commit_message: str):
         url = f"{self.api_url}/contents/{path_in_repo}"
@@ -92,10 +118,24 @@ class GitHubClient:
                 path_in_repo = f"redmine_attachments/issue-{issue_id}/{filename}"
                 commit_message = f"Add attachment {filename} from Redmine issue {issue_id}"
                 try:
-                    self._ensure_default_branch()
+                    # Determine if this is an image early so we can optionally reuse an existing file
+                    is_image = (content_type.startswith('image/')) or bool(mimetypes.guess_type(filename)[0] or '').startswith('image/')
+
+                    # Path-based silent reuse for images: if the exact path already exists, skip upload
+                    if is_image and self._path_exists(path_in_repo):
+                        self._ensure_default_branch()
+                        raw_url = f"https://github.com/{self.repo}/blob/{self._default_branch}/{path_in_repo}?raw=true"
+                        uploaded_assets.append({
+                            "filename": filename,
+                            "raw_url": raw_url,
+                            "is_image": True
+                        })
+                        logging.info(f"Reusing existing image '{filename}' at '{path_in_repo}' (skipping upload)")
+                        continue
+
+                    self._ensure_default_branch()  # ensure branch before constructing raw url after upload
                     self._upload_file(path_in_repo, content_bytes, commit_message)
                     raw_url = f"https://github.com/{self.repo}/blob/{self._default_branch}/{path_in_repo}?raw=true"
-                    is_image = (content_type.startswith('image/')) or bool(mimetypes.guess_type(filename)[0] or '').startswith('image/')
                     uploaded_assets.append({
                         "filename": filename,
                         "raw_url": raw_url,
