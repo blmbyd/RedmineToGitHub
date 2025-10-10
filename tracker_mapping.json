@@ -1,0 +1,11 @@
+{
+  "Błąd (Bug)": "bug",
+  "Funkcjonalność (Feature)": "enhancement",
+  "Task": "task",
+  "Wsparcie (Support)": "question",
+  "Improvement": "enhancement",
+  "New Feature": "enhancement",
+  "Defect": "bug",
+  "Story": "feature",
+  "Epic": "epic"
+}

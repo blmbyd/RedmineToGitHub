@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import argparse
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ def main():
     parser.add_argument('--limit', type=int, help='Maximum number of issues to migrate')
     parser.add_argument('--start-from', type=int, default=0, help='Issue number to start migration from (default: 0 = start from beginning)')
     parser.add_argument('--attachments', choices=['mirror','none'], help='Attachment handling mode (default: mirror). "mirror" uploads attachments into the GitHub repo; "none" skips them.')
+    parser.add_argument('--tracker-mapping', type=str, help='Path to tracker mapping JSON file (default: tracker_mapping.json)')
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
@@ -37,6 +39,24 @@ def main():
     mirror_attachments = (attachments_mode == 'mirror')
     logging.info(f"Attachments mode: {attachments_mode}")
 
+    # Load tracker mapping configuration
+    tracker_mapping_file = args.tracker_mapping or os.getenv('TRACKER_MAPPING_FILE', 'tracker_mapping.json')
+    tracker_mapping = {}
+    
+    if os.path.exists(tracker_mapping_file):
+        try:
+            with open(tracker_mapping_file, 'r', encoding='utf-8') as f:
+                tracker_mapping = json.load(f)
+            logging.info(f"Loaded tracker mapping from '{tracker_mapping_file}' with {len(tracker_mapping)} mappings")
+        except json.JSONDecodeError as e:
+            logging.error(f"Invalid JSON in tracker mapping file '{tracker_mapping_file}': {e}")
+            return
+        except Exception as e:
+            logging.error(f"Failed to load tracker mapping file '{tracker_mapping_file}': {e}")
+            return
+    else:
+        logging.info(f"Tracker mapping file '{tracker_mapping_file}' not found. Issues will be created without tracker-based labels.")
+
     # Initialize clients
     logging.info("Initializing Redmine and GitHub clients...")
     redmine = RedmineClient(
@@ -45,7 +65,8 @@ def main():
     )
     github = GitHubClient(
         repo=GITHUB_REPO,
-        token=GITHUB_TOKEN
+        token=GITHUB_TOKEN,
+        tracker_mapping=tracker_mapping
     )
 
     # Fetch issues from Redmine

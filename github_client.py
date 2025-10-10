@@ -6,13 +6,15 @@ import re
 from typing import List, Dict, Optional
 
 class GitHubClient:
-    def __init__(self, repo, token):
+    def __init__(self, repo, token, tracker_mapping=None):
         self.repo = repo
         self.token = token
         self.api_url = f"https://api.github.com/repos/{self.repo}"
         self._default_branch: Optional[str] = None
         # Cache of paths confirmed to exist in the repo during this runtime
         self._existing_paths = set()
+        # Tracker to label mapping configuration
+        self.tracker_mapping = tracker_mapping or {}
 
     def _headers(self):
         return {
@@ -84,6 +86,37 @@ class GitHubClient:
                 lines.append(f"[{asset['filename']}]({asset['raw_url']})")
         return "\n".join(lines) + "\n"
 
+    def _get_labels_for_issue(self, issue) -> List[str]:
+        """Get GitHub labels for a Redmine issue based on tracker mapping."""
+        if not self.tracker_mapping:
+            return []
+        
+        tracker = issue.get('tracker')
+        if not tracker:
+            return []
+        
+        # Try to match by tracker name (case-insensitive)
+        tracker_name = tracker.get('name', '').strip()
+        tracker_id = str(tracker.get('id', ''))
+        
+        labels = []
+        
+        # Check for exact name match (case-insensitive)
+        for key, value in self.tracker_mapping.items():
+            if key.lower() == tracker_name.lower() or key == tracker_id:
+                if isinstance(value, str):
+                    # Split comma-separated labels and strip whitespace
+                    mapped_labels = [label.strip() for label in value.split(',') if label.strip()]
+                    labels.extend(mapped_labels)
+                break
+        
+        if labels:
+            logging.info(f"Mapped tracker '{tracker_name}' (ID: {tracker_id}) to labels: {labels}")
+        else:
+            logging.debug(f"No mapping found for tracker '{tracker_name}' (ID: {tracker_id})")
+        
+        return labels
+
     def create_issue_from_redmine(self, issue, mirror_attachments=False, redmine_client=None):
         logging.info(f"Creating GitHub issue for Redmine issue #{issue.get('id', 'unknown')}")
         headers = self._headers()
@@ -154,7 +187,15 @@ class GitHubClient:
             body += author_info
 
         title = f"{issue['subject']} [Redmine-{issue_id}]"
+        
+        # Get labels based on tracker mapping
+        labels = self._get_labels_for_issue(issue)
+        
         data = {'title': title, 'body': body}
+        if labels:
+            data['labels'] = labels
+            logging.info(f"Creating GitHub issue with labels: {labels}")
+        
         resp = requests.post(f"{self.api_url}/issues", headers=headers, json=data)
         if resp.status_code == 201:
             issue_number = resp.json().get('number')

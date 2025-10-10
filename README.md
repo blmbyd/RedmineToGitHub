@@ -86,3 +86,60 @@ Limitations:
 - Filenames that collide within the same issue get a numeric suffix (`-1`, `-2`, ...).
 
 Security note: Attachments are stored in the repository history. Remove sensitive artifacts from Redmine before migration if they should not become part of Git version history.
+
+## Tracker to Label Mapping
+
+The migrator can automatically map Redmine tracker types to GitHub labels during migration.
+
+### Configuration
+
+Create a `tracker_mapping.json` file in the project root with tracker-to-label mappings:
+
+```json
+{
+  "Bug": "bug",
+  "Feature": "enhancement",
+  "Task": "task",
+  "Support": "question",
+  "Improvement": "enhancement",
+  "New Feature": "enhancement",
+  "Defect": "bug",
+  "Story": "feature",
+  "Epic": "epic"
+}
+```
+
+### Usage
+
+The mapping file is loaded automatically from `tracker_mapping.json`. You can override this:
+
+**Command line:**
+```powershell
+python main.py --tracker-mapping path/to/custom_mapping.json
+```
+
+**Environment variable:**
+```
+TRACKER_MAPPING_FILE=path/to/custom_mapping.json
+```
+
+### Mapping Rules
+
+- **By Name**: Match tracker names (case-insensitive): `"Bug": "bug"`
+- **By ID**: Match tracker IDs numerically: `"1": "bug"`
+- **Multiple Labels**: Use comma-separated values: `"Bug": "bug,critical"`
+- **Missing File**: Migration continues without tracker-based labels (warning logged)
+- **No Match**: Issues created without tracker labels (no error)
+
+### Examples
+
+```powershell
+# Use default tracker_mapping.json
+python main.py
+
+# Use custom mapping file
+python main.py --tracker-mapping config/my_tracker_mapping.json
+
+# Combine with other options
+python main.py --limit 50 --tracker-mapping custom_mapping.json --attachments none
+```
