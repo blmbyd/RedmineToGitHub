@@ -143,3 +143,65 @@ python main.py --tracker-mapping config/my_tracker_mapping.json
 # Combine with other options
 python main.py --limit 50 --tracker-mapping custom_mapping.json --attachments none
 ```
+
+## User Mapping
+
+The migrator can automatically map Redmine usernames to GitHub usernames, creating proper @mentions for notifications and attribution.
+
+### Configuration
+
+Create a `user_mapping.json` file in the project root with username mappings:
+
+```json
+{
+  "john.doe": "@johndoe",
+  "jane.smith": "janesmith",
+  "admin": "@admin-user",
+  "Mike Wilson": "@mikew",
+  "test.user": "@testuser",
+  "pawel.stuczynski": "@blmbyd"
+}
+```
+
+### Usage
+
+The mapping file is loaded automatically from `user_mapping.json`. You can override this:
+
+**Command line:**
+```powershell
+python main.py --user-mapping path/to/custom_user_mapping.json
+```
+
+**Environment variable:**
+```
+USER_MAPPING_FILE=path/to/custom_user_mapping.json
+```
+
+### Mapping Rules
+
+- **Exact Match**: Direct username mapping: `"john.doe": "@johndoe"`
+- **Case-Insensitive**: Handles username case variations automatically
+- **@ Prefix**: Automatically adds @ prefix for GitHub mentions if not present
+- **Text Processing**: Maps usernames mentioned in issue descriptions and comments
+- **Fallback**: Uses original Redmine usernames if no mapping exists
+- **No API Calls**: Simple text replacement - no GitHub API quota consumption
+
+### Behavior
+
+- **Issue Assignment**: Redmine assignees are mapped and assigned to GitHub issues
+- **Comment Authors**: Comment metadata shows mapped GitHub username  
+- **Content Mapping**: Usernames within issue/comment text become GitHub @mentions
+- **Notifications**: Mapped users receive GitHub notifications when mentioned or assigned
+
+### Examples
+
+```powershell
+# Use default user_mapping.json
+python main.py
+
+# Use custom mapping file
+python main.py --user-mapping config/my_user_mapping.json
+
+# Combine with other options
+python main.py --limit 50 --user-mapping custom_mapping.json --tracker-mapping tracker_config.json
+```

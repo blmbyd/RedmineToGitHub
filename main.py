@@ -22,6 +22,7 @@ def main():
     parser.add_argument('--start-from', type=int, default=0, help='Issue number to start migration from (default: 0 = start from beginning)')
     parser.add_argument('--attachments', choices=['mirror','none'], help='Attachment handling mode (default: mirror). "mirror" uploads attachments into the GitHub repo; "none" skips them.')
     parser.add_argument('--tracker-mapping', type=str, help='Path to tracker mapping JSON file (default: tracker_mapping.json)')
+    parser.add_argument('--user-mapping', type=str, help='Path to user mapping JSON file (default: user_mapping.json)')
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
@@ -57,6 +58,24 @@ def main():
     else:
         logging.info(f"Tracker mapping file '{tracker_mapping_file}' not found. Issues will be created without tracker-based labels.")
 
+    # Load user mapping configuration
+    user_mapping_file = args.user_mapping or os.getenv('USER_MAPPING_FILE', 'user_mapping.json')
+    user_mapping = {}
+    
+    if os.path.exists(user_mapping_file):
+        try:
+            with open(user_mapping_file, 'r', encoding='utf-8') as f:
+                user_mapping = json.load(f)
+            logging.info(f"Loaded user mapping from '{user_mapping_file}' with {len(user_mapping)} mappings")
+        except json.JSONDecodeError as e:
+            logging.error(f"Invalid JSON in user mapping file '{user_mapping_file}': {e}")
+            return
+        except Exception as e:
+            logging.error(f"Failed to load user mapping file '{user_mapping_file}': {e}")
+            return
+    else:
+        logging.info(f"User mapping file '{user_mapping_file}' not found. Users will not be mapped to GitHub accounts.")
+
     # Initialize clients
     logging.info("Initializing Redmine and GitHub clients...")
     redmine = RedmineClient(
@@ -66,7 +85,8 @@ def main():
     github = GitHubClient(
         repo=GITHUB_REPO,
         token=GITHUB_TOKEN,
-        tracker_mapping=tracker_mapping
+        tracker_mapping=tracker_mapping,
+        user_mapping=user_mapping
     )
 
     # Fetch issues from Redmine

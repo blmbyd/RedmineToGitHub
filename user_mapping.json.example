@@ -1,0 +1,10 @@
+{
+  "_comment": "Example user mapping configuration",
+  "_description": "Maps Redmine usernames to GitHub usernames for proper attribution and mentions",
+  
+  "john.doe": "@johndoe",
+  "jane.smith": "janesmith",
+  "admin": "@admin-user",
+  "Mike Wilson": "@mikew",
+  "test.user": "@testuser"
+}
