@@ -34,7 +34,7 @@ class RedmineClient:
                     # Fetch journals for this issue
                     try:
                         detail_url = f"{self.url}/issues/{issue_id}.json"
-                        detail_params = {'key': self.api_key, 'include': 'journals'}
+                        detail_params = {'key': self.api_key, 'include': 'journals,details'}
                         detail_resp = requests.get(detail_url, params=detail_params, verify=False)
                         detail_resp.raise_for_status()
                         detail_data = detail_resp.json()

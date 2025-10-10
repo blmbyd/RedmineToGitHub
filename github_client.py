@@ -257,16 +257,24 @@ class GitHubClient:
         if resp.status_code == 201:
             issue_number = resp.json().get('number')
             logging.info(f"Successfully created GitHub issue #{issue_number} for Redmine issue #{issue_id}")
-            # --- Add Redmine notes as GitHub comments ---
+            # --- Add Redmine notes and field changes as GitHub comments ---
             notes = issue.get('journals', []) or []
             for note in notes:
                 note_text = note.get('notes') or ''
-                if not note_text.strip():
+                details = note.get('details', [])
+                # Skip empty notes with no field changes
+                if not note_text.strip() and not details:
                     continue
                 author = note.get('user', {}).get('name') or note.get('author', {}).get('name') or 'Unknown'
                 created_on = note.get('created_on') or note.get('createdAt') or ''
                 mapped_author = self._get_github_username_for_redmine_user(author)
-                comment_body = self._map_users_in_text(note_text)
+                comment_body = ""
+                if note_text.strip():
+                    comment_body += self._map_users_in_text(note_text.strip()) + "\n"
+                # Add formatted field changes
+                field_changes = self._format_journal_field_changes(details)
+                if field_changes:
+                    comment_body += field_changes
                 # Optionally add author/timestamp metadata
                 meta = []
                 if mapped_author:
@@ -274,7 +282,7 @@ class GitHubClient:
                 if created_on:
                     meta.append(f"*Created on {created_on}*")
                 if meta:
-                    comment_body += "\n\n---\n" + " ".join(meta)
+                    comment_body += "\n---\n" + " ".join(meta)
                 comment_data = {'body': comment_body}
                 comment_url = f"{self.api_url}/issues/{issue_number}/comments"
                 try:
@@ -289,3 +297,53 @@ class GitHubClient:
             logging.error(f"Failed to create GitHub issue for Redmine issue #{issue_id}: {resp.status_code} {resp.text}")
         resp.raise_for_status()
         return resp.json()
+
+    def _format_journal_field_changes(self, details):
+        """Format Redmine journal details (field changes) for GitHub comment markdown."""
+        if not details:
+            return ""
+        field_map = {
+            'status_id': 'Status',
+            'assigned_to_id': 'Assignee',
+            'priority_id': 'Priority',
+            'tracker_id': 'Tracker',
+            'fixed_version_id': 'Fixed Version',
+            'category_id': 'Category',
+            'subject': 'Subject',
+            'description': 'Description',
+            'done_ratio': 'Done Ratio',
+            'start_date': 'Start Date',
+            'due_date': 'Due Date',
+            'custom_field': 'Custom Field',
+            'build': 'Build',
+        }
+        changes = []
+        for d in details:
+            name = d.get('name') or d.get('property') or ''
+            prop = d.get('property')
+            key = d.get('name')
+            field = field_map.get(key, key)
+            old = d.get('old_value')
+            new = d.get('new_value')
+            # Custom field name
+            if prop == 'cf':
+                field = d.get('custom_field_name', f"Custom Field {key}")
+            # User mapping for assignee
+            if key == 'assigned_to_id':
+                if old:
+                    old = self._get_github_username_for_redmine_user(str(old))
+                if new:
+                    new = self._get_github_username_for_redmine_user(str(new))
+            # Status, priority, tracker, etc. (IDs to names if available)
+            # For now, just show raw values; can be improved with lookup if needed
+            if old is None and new is not None:
+                changes.append(f"- {field}: → {new}")
+            elif old is not None and new is not None:
+                changes.append(f"- {field}: {old} → {new}")
+            elif old is not None and new is None:
+                changes.append(f"- {field}: {old} → (unset)")
+            else:
+                changes.append(f"- {field}: changed")
+        if changes:
+            return "\n**Field Changes:**\n" + "\n".join(changes) + "\n"
+        return ""
