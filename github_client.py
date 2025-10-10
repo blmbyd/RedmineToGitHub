@@ -17,6 +17,8 @@ class GitHubClient:
         self.tracker_mapping = tracker_mapping or {}
         # User mapping configuration
         self.user_mapping = user_mapping or {}
+        # Current issue data for ID resolution
+        self._current_issue = None
 
     def _headers(self):
         return {
@@ -157,10 +159,79 @@ class GitHubClient:
         
         return modified_text
 
+    def _resolve_status_name(self, status_id: str) -> str:
+        """Resolve status ID to status name using current issue data."""
+        if not self._current_issue or not status_id:
+            return status_id
+        
+        # Check if the current status matches
+        current_status = self._current_issue.get('status')
+        if current_status and str(current_status.get('id', '')) == str(status_id):
+            return current_status.get('name', status_id)
+        
+        # Fallback to ID if not found
+        return f"Status ID {status_id}"
+    
+    def _resolve_priority_name(self, priority_id: str) -> str:
+        """Resolve priority ID to priority name using current issue data."""
+        if not self._current_issue or not priority_id:
+            return priority_id
+        
+        # Check if the current priority matches
+        current_priority = self._current_issue.get('priority')
+        if current_priority and str(current_priority.get('id', '')) == str(priority_id):
+            return current_priority.get('name', priority_id)
+        
+        # Fallback to ID if not found
+        return f"Priority ID {priority_id}"
+    
+    def _resolve_tracker_name(self, tracker_id: str) -> str:
+        """Resolve tracker ID to tracker name using current issue data."""
+        if not self._current_issue or not tracker_id:
+            return tracker_id
+        
+        # Check if the current tracker matches
+        current_tracker = self._current_issue.get('tracker')
+        if current_tracker and str(current_tracker.get('id', '')) == str(tracker_id):
+            return current_tracker.get('name', tracker_id)
+        
+        # Fallback to ID if not found
+        return f"Tracker ID {tracker_id}"
+    
+    def _resolve_assignee_name(self, assignee_id: str) -> str:
+        """Resolve assignee ID to assignee name using current issue data."""
+        if not self._current_issue or not assignee_id:
+            return assignee_id
+        
+        # Check if the current assignee matches
+        current_assignee = self._current_issue.get('assigned_to')
+        if current_assignee and str(current_assignee.get('id', '')) == str(assignee_id):
+            assignee_name = current_assignee.get('name', assignee_id)
+            return self._get_github_username_for_redmine_user(assignee_name)
+        
+        # Fallback to ID if not found
+        return f"User ID {assignee_id}"
+    
+    def _resolve_custom_field_name(self, cf_id: str) -> str:
+        """Resolve custom field ID to custom field name using current issue data."""
+        if not self._current_issue or not cf_id:
+            return f"Custom Field {cf_id}"
+        
+        # Look through custom_fields array
+        custom_fields = self._current_issue.get('custom_fields', [])
+        for cf in custom_fields:
+            if str(cf.get('id', '')) == str(cf_id):
+                return cf.get('name', f"Custom Field {cf_id}")
+        
+        # Fallback to generic name with ID
+        return f"Custom Field {cf_id}"
+
     def create_issue_from_redmine(self, issue, mirror_attachments=False, redmine_client=None):
         logging.info(f"Creating GitHub issue for Redmine issue #{issue.get('id', 'unknown')}")
         headers = self._headers()
-
+        
+        # Store current issue for ID resolution
+        self._current_issue = issue
         issue_id = issue.get('id', 'unknown')
         body = self._map_users_in_text(issue.get('description') or '')
 
@@ -257,46 +328,74 @@ class GitHubClient:
         if resp.status_code == 201:
             issue_number = resp.json().get('number')
             logging.info(f"Successfully created GitHub issue #{issue_number} for Redmine issue #{issue_id}")
-            # --- Add Redmine notes and field changes as GitHub comments ---
+            # --- Add Redmine notes and field changes as a single consolidated GitHub comment ---
             notes = issue.get('journals', []) or []
-            for note in notes:
-                note_text = note.get('notes') or ''
-                details = note.get('details', [])
-                # Skip empty notes with no field changes
-                if not note_text.strip() and not details:
-                    continue
-                author = note.get('user', {}).get('name') or note.get('author', {}).get('name') or 'Unknown'
-                created_on = note.get('created_on') or note.get('createdAt') or ''
-                mapped_author = self._get_github_username_for_redmine_user(author)
-                comment_body = ""
-                if note_text.strip():
-                    comment_body += self._map_users_in_text(note_text.strip()) + "\n"
-                # Add formatted field changes
-                field_changes = self._format_journal_field_changes(details)
-                if field_changes:
-                    comment_body += field_changes
-                # Optionally add author/timestamp metadata
-                meta = []
-                if mapped_author:
-                    meta.append(f"*By {mapped_author}*")
-                if created_on:
-                    meta.append(f"*Created on {created_on}*")
-                if meta:
-                    comment_body += "\n---\n" + " ".join(meta)
-                comment_data = {'body': comment_body}
+            consolidated_comment = self._build_consolidated_journal_comment(notes)
+            if consolidated_comment:
+                comment_data = {'body': consolidated_comment}
                 comment_url = f"{self.api_url}/issues/{issue_number}/comments"
                 try:
                     comment_resp = requests.post(comment_url, headers=headers, json=comment_data)
                     if comment_resp.status_code == 201:
-                        logging.info(f"Added comment for Redmine note to GitHub issue #{issue_number}")
+                        logging.info(f"Added consolidated comment with {len([n for n in notes if (n.get('notes', '').strip() or n.get('details', []))])} journal entries to GitHub issue #{issue_number}")
                     else:
-                        logging.warning(f"Failed to add comment for Redmine note to GitHub issue #{issue_number}: {comment_resp.status_code} {comment_resp.text}")
+                        logging.warning(f"Failed to add consolidated comment to GitHub issue #{issue_number}: {comment_resp.status_code} {comment_resp.text}")
                 except Exception as e:
-                    logging.warning(f"Exception posting comment for Redmine note: {e}")
+                    logging.warning(f"Exception posting consolidated comment: {e}")
         else:
             logging.error(f"Failed to create GitHub issue for Redmine issue #{issue_id}: {resp.status_code} {resp.text}")
         resp.raise_for_status()
         return resp.json()
+
+    def _build_consolidated_journal_comment(self, notes: List[Dict]) -> str:
+        """Build a single consolidated comment containing all Redmine journal entries."""
+        if not notes:
+            return ""
+        
+        # Filter out empty notes with no content or field changes
+        valid_notes = []
+        for note in notes:
+            note_text = note.get('notes') or ''
+            details = note.get('details', [])
+            if note_text.strip() or details:
+                valid_notes.append(note)
+        
+        if not valid_notes:
+            return ""
+        
+        comment_parts = ["## Redmine Issue History\n"]
+        
+        for i, note in enumerate(valid_notes, 1):
+            note_text = note.get('notes') or ''
+            details = note.get('details', [])
+            author = note.get('user', {}).get('name') or note.get('author', {}).get('name') or 'Unknown'
+            created_on = note.get('created_on') or note.get('createdAt') or ''
+            mapped_author = self._get_github_username_for_redmine_user(author)
+            
+            # Entry header
+            entry_header = f"### Entry {i}"
+            if created_on:
+                entry_header += f" - {created_on}"
+            comment_parts.append(entry_header)
+            
+            # Author info
+            if mapped_author:
+                comment_parts.append(f"*By {mapped_author}*\n")
+            
+            # Note text
+            if note_text.strip():
+                comment_parts.append(self._map_users_in_text(note_text.strip()) + "\n")
+            
+            # Field changes
+            field_changes = self._format_journal_field_changes(details)
+            if field_changes:
+                comment_parts.append(field_changes)
+            
+            # Add separator between entries (except for the last one)
+            if i < len(valid_notes):
+                comment_parts.append("---\n")
+        
+        return "\n".join(comment_parts)
 
     def _format_journal_field_changes(self, details):
         """Format Redmine journal details (field changes) for GitHub comment markdown."""
@@ -325,17 +424,34 @@ class GitHubClient:
             field = field_map.get(key, key)
             old = d.get('old_value')
             new = d.get('new_value')
-            # Custom field name
+            
+            # Custom field - resolve field name and ID to proper name
             if prop == 'cf':
-                field = d.get('custom_field_name', f"Custom Field {key}")
-            # User mapping for assignee
-            if key == 'assigned_to_id':
+                field = self._resolve_custom_field_name(key)
+            
+            # Resolve IDs to human-readable names based on field type
+            if key == 'status_id':
                 if old:
-                    old = self._get_github_username_for_redmine_user(str(old))
+                    old = self._resolve_status_name(str(old))
                 if new:
-                    new = self._get_github_username_for_redmine_user(str(new))
-            # Status, priority, tracker, etc. (IDs to names if available)
-            # For now, just show raw values; can be improved with lookup if needed
+                    new = self._resolve_status_name(str(new))
+            elif key == 'assigned_to_id':
+                if old:
+                    old = self._resolve_assignee_name(str(old))
+                if new:
+                    new = self._resolve_assignee_name(str(new))
+            elif key == 'priority_id':
+                if old:
+                    old = self._resolve_priority_name(str(old))
+                if new:
+                    new = self._resolve_priority_name(str(new))
+            elif key == 'tracker_id':
+                if old:
+                    old = self._resolve_tracker_name(str(old))
+                if new:
+                    new = self._resolve_tracker_name(str(new))
+            
+            # Format the change display
             if old is None and new is not None:
                 changes.append(f"- {field}: → {new}")
             elif old is not None and new is not None:
