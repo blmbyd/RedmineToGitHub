@@ -3,8 +3,12 @@ import json
 import logging
 import argparse
 from dotenv import load_dotenv
+import urllib3
 from redmine_client import RedmineClient
 from github_client import GitHubClient
+
+# Disable insecure request warnings
+urllib3.disable_warnings()
 
 # Load environment variables from .env file
 load_dotenv()
